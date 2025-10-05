@@ -1,63 +1,27 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Panel de Riego V3</title>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <title>Panel de Riego Híbrido</title>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-database.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    body { font-family: sans-serif; text-align: center; padding: 2em; background: #f0f0f0; }
-    h1 { color: #2c3e50; }
-    .dato { font-size: 2em; margin: 1em 0; padding: 0.5em; border-radius: 10px; display: inline-block; }
-    .riego, .origen { margin-top: 1em; font-weight: bold; color: #2980b9; }
-    button, select { padding: 0.5em 1em; font-size: 1em; margin: 0.5em; border-radius: 5px; }
-    button { border: none; cursor: pointer; color: white; }
-    button:hover { opacity: 0.9; }
-    .on { background: #27ae60; }
-    .off { background: #c0392b; }
-    .auto { background: #3498db; }
-    .manual { background: #8e44ad; }
-    canvas { margin-top: 2em; }
-  </style>
 </head>
 <body>
-  <h1>🌱 Panel de Riego V3</h1>
-  <div id="humedadBox" class="dato">Humedad actual: <span id="humedad">--</span>%</div>
-  <div class="riego">Estado de riego: <span id="estadoRiego">--</span></div>
-  <div class="origen">Origen del cambio: <span id="origenRiego">--</span></div>
-  <button class="on" onclick="activarRiego()">Activar riego</button>
-  <button class="off" onclick="desactivarRiego()">Desactivar riego</button>
-  <button class="auto" onclick="activarAutomatico()">Modo automático</button>
-  <button class="manual" onclick="activarManual()">Modo manual</button>
+  <h1>🌱 Panel de Riego Híbrido</h1>
 
   <div>
-    <h3>📅 Consultar historial</h3>
-    <select id="mes">
-      <option value="1">Enero</option>
-      <option value="2">Febrero</option>
-      <option value="3">Marzo</option>
-      <option value="4">Abril</option>
-      <option value="5">Mayo</option>
-      <option value="6">Junio</option>
-      <option value="7">Julio</option>
-      <option value="8">Agosto</option>
-      <option value="9" selected>Septiembre</option>
-      <option value="10">Octubre</option>
-      <option value="11">Noviembre</option>
-      <option value="12">Diciembre</option>
-    </select>
-    <select id="anio">
-      <option value="2024">2024</option>
-      <option value="2025" selected>2025</option>
-    </select>
-    <button onclick="cargarHistorial()">Ver historial</button>
+    <h3>Humedad en Vivo</h3>
+    Zona 1: <span id="hum1">--</span>%<br>
+    Zona 2: <span id="hum2">--</span>%<br>
+    Estado Bomba: <span id="bomba">OFF</span><br>
+    Origen: <span id="origen">auto</span><br>
   </div>
 
-  <canvas id="graficoHumedad" width="400" height="200"></canvas>
+  <canvas id="grafico" width="600" height="300"></canvas>
 
   <script>
-    // 🔹 Configuración Firebase V3
+    // ================= CONFIG FIREBASE =================
     const firebaseConfig = {
       apiKey: "AIzaSyDm4UQ_tOSC36IfWjHwNOP2aYAy_iMjE9c",
       authDomain: "riego-hibrido-v3.firebaseapp.com",
@@ -67,112 +31,46 @@
       messagingSenderId: "991487752193",
       appId: "1:991487752193:web:3369272f5ebbb357b6a800"
     };
-
-    firebase.initializeApp(firebaseConfig);
+    const app = firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    db.ref("riego/humedad").on("value", snapshot => {
-      const valor = snapshot.val();
-      const humedad = document.getElementById("humedad");
-      const box = document.getElementById("humedadBox");
-      humedad.textContent = valor ?? "--";
-      box.style.background = valor < 30 ? "#e74c3c" : valor < 60 ? "#f1c40f" : "#2ecc71";
+    // ================= DOM =================
+    const hum1 = document.getElementById("hum1");
+    const hum2 = document.getElementById("hum2");
+    const bomba = document.getElementById("bomba");
+    const origen = document.getElementById("origen");
+
+    // ================= GRAFICO =================
+    const ctx = document.getElementById("grafico").getContext("2d");
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          { label: 'Zona 1 (%)', data: [], borderColor: 'blue', fill: false },
+          { label: 'Zona 2 (%)', data: [], borderColor: 'green', fill: false }
+        ]
+      },
+      options: { responsive: true }
     });
 
-    db.ref("riego/bomba").on("value", snapshot => {
-      const estado = snapshot.val();
-      document.getElementById("estadoRiego").textContent =
-        estado === "ON" ? "💧 Activada" :
-        estado === "OFF" ? "🛑 Desactivada" : "--";
+    // ================= LECTURAS EN VIVO =================
+    db.ref("riego/zona1").on("value", snap => hum1.textContent = snap.val());
+    db.ref("riego/zona2").on("value", snap => hum2.textContent = snap.val());
+    db.ref("riego/bomba").on("value", snap => bomba.textContent = snap.val());
+    db.ref("riego/origen").on("value", snap => origen.textContent = snap.val());
+
+    // ================= HISTORIAL =================
+    db.ref("riego/historial").limitToLast(20).on("child_added", snap => {
+      const val = snap.val();
+      if(val){
+        const fecha = new Date(val.t * 1000);
+        chart.data.labels.push(fecha.toLocaleTimeString());
+        chart.data.datasets[0].data.push(val.z1);
+        chart.data.datasets[1].data.push(val.z2);
+        chart.update();
+      }
     });
-
-    db.ref("riego/origen").on("value", snapshot => {
-      const origen = snapshot.val();
-      document.getElementById("origenRiego").textContent =
-        origen === "auto" ? "🔄 Automático" :
-        origen === "manual" ? "🧑‍🔧 Manual" : "--";
-    });
-
-    function activarRiego() {
-      db.ref("riego/bomba").set("ON");
-      db.ref("riego/origen").set("manual");
-      alert("💧 Riego activado manualmente");
-    }
-
-    function desactivarRiego() {
-      db.ref("riego/bomba").set("OFF");
-      db.ref("riego/origen").set("manual");
-      alert("🛑 Riego desactivado manualmente");
-    }
-
-    function activarAutomatico() {
-      db.ref("riego/origen").set("auto");
-      alert("🔄 Modo automático activado");
-    }
-
-    function activarManual() {
-      db.ref("riego/origen").set("manual");
-      alert("🧑‍🔧 Modo manual activado");
-    }
-
-    const ctx = document.getElementById("graficoHumedad").getContext("2d");
-    const grafico = new Chart(ctx, {
-      type: "line",
-      data: { labels: [], datasets: [{ label: "Humedad (%)", data: [], borderColor: "#27ae60", backgroundColor: "rgba(39,174,96,0.2)", fill: true, tension: 0.3 }] },
-      options: { scales: { x: { title: { display: true, text: "Fecha y hora" } }, y: { min: 0, max: 100, title: { display: true, text: "Humedad (%)" } } } }
-    });
-
-    function cargarUltimaSemana() {
-      const hoy = new Date();
-      const año = hoy.getFullYear();
-      const mes = hoy.getMonth() + 1;
-      const diaActual = hoy.getDate();
-      const diasVisibles = 7;
-
-      db.ref(`riego/historial/${año}/${mes}`).on("value", snapshot => {
-        const datos = snapshot.val();
-        const etiquetas = [];
-        const valores = [];
-
-        for (const dia in datos) {
-          const diaNum = parseInt(dia);
-          if (diaNum >= diaActual - diasVisibles && diaNum <= diaActual) {
-            for (const hora in datos[dia]) {
-              etiquetas.push(`${dia}/${mes} ${hora}`);
-              valores.push(datos[dia][hora]);
-            }
-          }
-        }
-
-        grafico.data.labels = etiquetas;
-        grafico.data.datasets[0].data = valores;
-        grafico.update();
-      });
-    }
-
-    function cargarHistorial() {
-      const mes = document.getElementById("mes").value;
-      const anio = document.getElementById("anio").value;
-
-      db.ref(`riego/historial/${anio}/${mes}`).once("value").then(snapshot => {
-        const datos = snapshot.val();
-        const etiquetas = [];
-        const valores = [];
-
-        for (const dia in datos) {
-          for (const hora in datos[dia]) {
-            etiquetas.push(`${dia}/${mes} ${hora}`);
-            valores.push(datos[dia][hora]);
-          }
-        }
-
-        grafico.data.labels = etiquetas;
-        grafico.data.datasets[0].data = valores;
-        grafico.update();
-      });
-    }
-
-    cargarUltimaSemana();
   </script>
 </body>
 </html>
