@@ -26,157 +26,180 @@ canvas { margin-top: 2em; }
 <h1>🌱 Panel de Riego Híbrido</h1>
 
 <div>
-  <div id="zona1Box" class="zona-box zona1">Zona 1: <span id="humedad1">--</span>%</div>
-  <div id="zona2Box" class="zona-box zona2">Zona 2: <span id="humedad2">--</span>%</div>
+    <div id="zona1Box" class="zona-box zona1">Zona 1: <span id="humedad1">--</span>%</div>
+    <div id="zona2Box" class="zona-box zona2">Zona 2: <span id="humedad2">--</span>%</div>
 </div>
 
 <div class="estado">Estado de riego: <span id="estadoRiego">--</span></div>
 <div class="estado">Origen: <span id="origenRiego">--</span></div>
 
 <div>
-  <label for="selectZona">Seleccionar zona:</label>
-  <select id="selectZona">
-    <option value="1">Zona 1</option>
-    <option value="2">Zona 2</option>
-    <option value="0">Ambas</option>
-  </select>
+    <label for="selectZona">Seleccionar zona:</label>
+    <select id="selectZona">
+        <option value="1">Zona 1</option>
+        <option value="2">Zona 2</option>
+        <option value="0">Ambas</option>
+    </select>
 </div>
 
 <div>
-  <button class="on" onclick="activarRiego()">Activar riego</button>
-  <button class="off" onclick="desactivarRiego()">Desactivar riego</button>
-  <button class="auto" onclick="activarAutomatico()">Modo automático</button>
-  <button class="manual" onclick="activarManual()">Modo manual</button>
+    <button class="on" onclick="activarRiego()">Activar riego</button>
+    <button class="off" onclick="desactivarRiego()">Desactivar riego</button>
+    <button class="auto" onclick="activarAutomatico()">Modo automático</button>
+    <button class="manual" onclick="activarManual()">Modo manual</button>
 </div>
 
 <div>
-  <h3>📅 Consultar historial</h3>
-  <select id="mes">
-    <option value="1">Enero</option>
-    <option value="2">Febrero</option>
-    <option value="3">Marzo</option>
-    <option value="4">Abril</option>
-    <option value="5">Mayo</option>
-    <option value="6">Junio</option>
-    <option value="7">Julio</option>
-    <option value="8">Agosto</option>
-    <option value="9" selected>Septiembre</option>
-    <option value="10">Octubre</option>
-    <option value="11">Noviembre</option>
-    <option value="12">Diciembre</option>
-  </select>
-  <select id="anio">
-    <option value="2024">2024</option>
-    <option value="2025" selected>2025</option>
-  </select>
-  <button onclick="cargarHistorial()">Ver historial</button>
+    <h3>📅 Consultar historial</h3>
+    <p>Mostrando datos de los últimos 7 días por defecto.</p>
+    <button onclick="cargarHistorialPersonalizado()">Ver últimos 7 días</button>
 </div>
 
 <canvas id="graficoHumedad" width="600" height="300"></canvas>
 
 <script>
+// La configuración de Firebase es la misma
 const firebaseConfig = {
-  apiKey: "AIzaSyDm4UQ_tOSC36IfWjHwNOP2aYAy_iMjE9c",
-  authDomain: "riego-hibrido-v3.firebaseapp.com",
-  databaseURL: "https://riego-hibrido-v3-default-rtdb.firebaseio.com",
-  projectId: "riego-hibrido-v3",
-  storageBucket: "riego-hibrido-v3.firebasestorage.app",
-  messagingSenderId: "991487752193",
-  appId: "1:991487752193:web:3369272f5ebbb357b6a800"
+    apiKey: "AIzaSyDm4UQ_tOSC36IfWjHwNOP2aYAy_iMjE9c", // Asume que esta es la correcta
+    databaseURL: "https://riego-hibrido-v3-default-rtdb.firebaseio.com",
+    // ... otros campos no utilizados son opcionales
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+const historialRef = db.ref("riego/historial");
 
-// Actualizar zonas
+// ======================= ACTUALIZACIÓN EN TIEMPO REAL =======================
+
+// Humedad y cajas de color
 db.ref("riego/zona1").on("value", snap => {
-  const val = snap.val();
-  document.getElementById("humedad1").textContent = val ?? "--";
-  const box = document.getElementById("zona1Box");
-  box.style.background = val<30 ? "#c0392b" : val<60 ? "#f1c40f" : "#3498db";
+    const val = snap.val();
+    document.getElementById("humedad1").textContent = val ?? "--";
+    const box = document.getElementById("zona1Box");
+    // Lógica de colores adaptada: Rojo (Seco <30), Amarillo (Normal 30-60), Azul (Húmedo >60)
+    box.style.background = val < 30 ? "#c0392b" : val < 60 ? "#f1c40f" : "#3498db";
 });
 db.ref("riego/zona2").on("value", snap => {
-  const val = snap.val();
-  document.getElementById("humedad2").textContent = val ?? "--";
-  const box = document.getElementById("zona2Box");
-  box.style.background = val<30 ? "#c0392b" : val<60 ? "#f39c12" : "#e67e22";
+    const val = snap.val();
+    document.getElementById("humedad2").textContent = val ?? "--";
+    const box = document.getElementById("zona2Box");
+    // Lógica de colores adaptada: Rojo (Seco <30), Naranja (Normal 30-60), Naranja oscuro (Húmedo >60)
+    box.style.background = val < 30 ? "#c0392b" : val < 60 ? "#f39c12" : "#e67e22";
 });
 
 // Estado de riego
 db.ref("riego/bomba").on("value", snap => {
-  const val = snap.val();
-  let texto = "--";
-  if(val==="ON") texto="💧 Activada"; else if(val==="OFF") texto="🛑 Desactivada";
-  document.getElementById("estadoRiego").textContent = texto;
+    const val = snap.val();
+    let texto = "--";
+    if (val === "ON") texto = "💧 Activada"; else if (val === "OFF" || val === "off") texto = "🛑 Desactivada";
+    document.getElementById("estadoRiego").textContent = texto;
 });
 db.ref("riego/origen").on("value", snap => {
-  const val = snap.val();
-  document.getElementById("origenRiego").textContent = val==="auto" ? "🔄 Automático" : "🧑‍🔧 Manual";
+    const val = snap.val();
+    document.getElementById("origenRiego").textContent = val === "auto" ? "🔄 Automático" : "🧑‍🔧 Manual";
 });
 
-// Funciones de control por zona
-function activarRiego(){
-  const z = document.getElementById("selectZona").value;
-  if(z=="1") db.ref("riego/motor/zona1").set(true);
-  else if(z=="2") db.ref("riego/motor/zona2").set(true);
-  else { db.ref("riego/motor/zona1").set(true); db.ref("riego/motor/zona2").set(true); }
-  db.ref("riego/origen").set("manual");
-  alert("💧 Riego activado manualmente");
-}
-function desactivarRiego(){
-  const z = document.getElementById("selectZona").value;
-  if(z=="1") db.ref("riego/motor/zona1").set(false);
-  else if(z=="2") db.ref("riego/motor/zona2").set(false);
-  else { db.ref("riego/motor/zona1").set(false); db.ref("riego/motor/zona2").set(false); }
-  db.ref("riego/origen").set("manual");
-  alert("🛑 Riego desactivado manualmente");
-}
-function activarAutomatico(){
-  const z = document.getElementById("selectZona").value;
-  if(z=="1") db.ref("riego/motor/zona1").set(true);
-  else if(z=="2") db.ref("riego/motor/zona2").set(true);
-  else { db.ref("riego/motor/zona1").set(true); db.ref("riego/motor/zona2").set(true); }
-  db.ref("riego/origen").set("auto");
-  alert("🔄 Modo automático activado");
-}
-function activarManual(){
-  db.ref("riego/origen").set("manual");
-  alert("🧑‍🔧 Modo manual activado");
-}
+// ======================= FUNCIONES DE CONTROL =======================
 
-// Gráfico historial
-const ctx = document.getElementById("graficoHumedad").getContext("2d");
-const grafico = new Chart(ctx,{
-  type:"line",
-  data:{labels:[],datasets:[
-    {label:"Zona 1", data:[], borderColor:"#3498db", backgroundColor:"rgba(52,152,219,0.2)", fill:true, tension:0.3},
-    {label:"Zona 2", data:[], borderColor:"#e67e22", backgroundColor:"rgba(230,126,34,0.2)", fill:true, tension:0.3}
-  ]},
-  options:{scales:{x:{title:{display:true,text:"Fecha y hora"}},y:{min:0,max:100,title:{display:true,text:"Humedad (%)"}}}}
-});
-
-function cargarHistorial(){
-  const mes = document.getElementById("mes").value;
-  const anio = document.getElementById("anio").value;
-  db.ref(`riego/historial/${anio}/${mes}`).once("value").then(snap=>{
-    const datos = snap.val()||{};
-    const etiquetas = [], data1=[], data2=[];
-    for(const dia in datos){
-      for(const hora in datos[dia]){
-        etiquetas.push(`${dia}/${mes} ${hora}`);
-        data1.push(datos[dia][hora].z1 ?? 0);
-        data2.push(datos[dia][hora].z2 ?? 0);
-      }
+function setControlValues(origen, zona1, zona2, mensaje) {
+    db.ref("riego/origen").set(origen);
+    // Controla solo la bomba (estado de riego) si es modo manual
+    if (origen === "manual") {
+        db.ref("riego/bomba").set(zona1 ? "ON" : "OFF");
+        // Nota: Los controles del motor (zona1/zona2) son manejados por el ESP32 en modo 'auto',
+        // pero se mantienen para permitir el control manual del motor si es necesario.
+        db.ref("riego/motor/zona1").set(zona1);
+        db.ref("riego/motor/zona2").set(zona2);
     }
-    grafico.data.labels = etiquetas;
-    grafico.data.datasets[0].data = data1;
-    grafico.data.datasets[1].data = data2;
-    grafico.update();
-  });
+    alert(mensaje);
 }
 
-// Carga inicial últimos 7 días
-function cargarUltimaSemana(){
-  const hoy = new Date(), año=hoy.getFullYear(), mes=hoy.getMonth()+1, diaActual=hoy.getDate(), diasVisibles=7;
-  db.ref(`riego/historial/${año}/${mes}`).on("value", snap=>{
-    const datos = snap.val()||{};
-    const
+function activarRiego() {
+    const z = document.getElementById("selectZona").value;
+    setControlValues("manual", z === "1" || z === "0", z === "2" || z === "0", "💧 Riego activado manualmente");
+}
+function desactivarRiego() {
+    setControlValues("manual", false, false, "🛑 Riego desactivado manualmente");
+}
+function activarAutomatico() {
+    // En modo automático, solo se cambia el origen. El ESP32 decide la bomba y el motor.
+    db.ref("riego/origen").set("auto");
+    alert("🔄 Modo automático activado. El riego se basará en los umbrales de humedad.");
+}
+function activarManual() {
+    // Solo se cambia el origen. El usuario debe controlar la bomba/motor con los botones de arriba.
+    db.ref("riego/origen").set("manual");
+    alert("🧑‍🔧 Modo manual activado. Usa los botones Activar/Desactivar riego.");
+}
+
+// ======================= LÓGICA DE GRÁFICO DE HISTORIAL =======================
+
+const ctx = document.getElementById("graficoHumedad").getContext("2d");
+const grafico = new Chart(ctx, {
+    type: "line",
+    data: {
+        labels: [],
+        datasets: [
+            { label: "Zona 1", data: [], borderColor: "#3498db", backgroundColor: "rgba(52,152,219,0.2)", fill: true, tension: 0.3 },
+            { label: "Zona 2", data: [], borderColor: "#e67e22", backgroundColor: "rgba(230,126,34,0.2)", fill: true, tension: 0.3 }
+        ]
+    },
+    options: {
+        scales: {
+            x: { title: { display: true, text: "Fecha y hora" } },
+            y: { min: 0, max: 100, title: { display: true, text: "Humedad (%)" } }
+        }
+    }
+});
+
+function cargarHistorial(tiempoInicial) {
+    // La clave es la marca de tiempo UNIX (en segundos)
+    historialRef
+        .orderByKey() // Ordena por la clave (timestamp UNIX)
+        .startAt(tiempoInicial.toString()) // Filtra desde el tiempo inicial
+        .once("value")
+        .then(snap => {
+            const datos = snap.val() || {};
+            const etiquetas = [], data1 = [], data2 = [];
+
+            // Recorre los datos y los formatea
+            for (const timestampKey in datos) {
+                const registro = datos[timestampKey];
+                // El timestamp es en SEGUNDOS (del ESP32), se convierte a milisegundos para JavaScript
+                const date = new Date(parseInt(timestampKey) * 1000); 
+
+                // Formato de etiqueta: "DD/MM HH:mm"
+                const etiqueta = `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+
+                etiquetas.push(etiqueta);
+                data1.push(registro.z1 ?? 0);
+                data2.push(registro.z2 ?? 0);
+            }
+
+            grafico.data.labels = etiquetas;
+            grafico.data.datasets[0].data = data1;
+            grafico.data.datasets[1].data = data2;
+            grafico.update();
+
+            if (etiquetas.length === 0) {
+                console.warn("No hay datos disponibles en el rango de tiempo seleccionado.");
+            }
+        })
+        .catch(error => {
+            console.error("Error al cargar el historial:", error);
+            alert("Hubo un error al cargar el historial.");
+        });
+}
+
+function cargarHistorialPersonalizado() {
+    // 7 días = 7 días * 24 horas/día * 3600 segundos/hora = 604800 segundos
+    const tiempoHace7Dias = Math.floor(Date.now() / 1000) - (7 * 24 * 3600); 
+    cargarHistorial(tiempoHace7Dias);
+    alert("Cargando historial de los últimos 7 días...");
+}
+
+// Carga inicial al cargar la página: muestra los últimos 7 días
+window.onload = cargarHistorialPersonalizado;
+
+</script>
+</body>
+</html>
