@@ -129,7 +129,7 @@
 
         async function initializeAppAndAuth() {
             try {
-                // 1. Configuración y Autenticación del entorno
+                // 1. Configuración de Firebase
                 const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
                 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
@@ -141,19 +141,26 @@
                 const auth = getAuth(app);
                 db = getDatabase(app);
 
+                // 2. Autenticación: Intentamos con token, si falla, usamos Anónimo (esencial para ESP32)
                 if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
+                    try {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } catch (e) {
+                        console.warn("Fallo la autenticación con token. Usando modo anónimo. Error:", e);
+                        await signInAnonymously(auth);
+                    }
                 } else {
                     await signInAnonymously(auth);
                 }
 
-                // 2. Iniciar Listeners de Datos una vez que la conexión es estable
+                // 3. Iniciar Listeners de Datos una vez que la conexión es estable
                 startRealtimeListeners();
                 cargarUltimaSemana(); 
 
             } catch (error) {
                 console.error("Error FATAL al inicializar Firebase o autenticar:", error);
-                mostrarNotificacion("Error de conexión: Por favor, revisa la consola.", 8000);
+                // Muestra un mensaje amigable al usuario
+                mostrarNotificacion("Error de conexión: Por favor, revisa la consola para detalles del fallo.", 8000);
             }
         }
 
@@ -196,7 +203,7 @@
         
         // Función para cambiar el estado de la Bomba (ON/OFF)
         window.controlRiego = (estado) => {
-            if (!db) return mostrarNotificacion("La base de datos no está inicializada.", 3000);
+            if (!db) return mostrarNotificacion("La base de datos no está lista.", 3000);
             set(ref(db, "riego/bomba"), estado)
                 .then(() => {
                     const mensaje = estado === 'ON' ? "💧 Riego activado manualmente." : "🛑 Riego desactivado manualmente.";
@@ -212,7 +219,7 @@
         
         // Función para cambiar el Origen (auto/manual)
         window.setModo = (modo) => {
-            if (!db) return mostrarNotificacion("La base de datos no está inicializada.", 3000);
+            if (!db) return mostrarNotificacion("La base de datos no está lista.", 3000);
             set(ref(db, "riego/origen"), modo)
                 .then(() => {
                     const mensaje = modo === 'auto' ? "🔄 Modo automático activado. ESP32 al control." : "🧑‍🔧 Modo manual activado.";
@@ -258,9 +265,9 @@
 
             if (datos) {
                 // Iterar sobre DÍA -> HORA:MINUTO -> VALOR
+                // Asumiendo que la estructura es historial/AÑO/MES/DIA/HORA:MINUTO = VALOR
                 for (const dia in datos) {
                     for (const hora in datos[dia]) {
-                        // Se extrae el mes y el año de la referencia (parent keys)
                         const mes = snapshot.ref.parent.key; 
                         const anio = snapshot.ref.parent.parent.key;
                         etiquetas.push(`${dia}/${mes}/${anio} ${hora}`);
@@ -282,7 +289,7 @@
             const año = hoy.getFullYear();
             const mes = hoy.getMonth() + 1;
             
-            // onValue escucha los cambios en tiempo real
+            // onValue escucha los cambios en tiempo real en la ruta del mes actual
             onValue(ref(db, `riego/historial/${año}/${mes}`), snapshot => {
                 procesarDatosHistorial(snapshot, `Datos en tiempo real de ${mes}/${año}`);
             });
@@ -290,13 +297,16 @@
 
         // Carga estática (get()) del historial solicitado por el usuario
         window.cargarHistorial = () => {
-            if (!db) return mostrarNotificacion("La base de datos no está inicializada.", 3000);
+            if (!db) return mostrarNotificacion("La base de datos no está lista.", 3000);
             const mes = document.getElementById("mes").value;
             const anio = document.getElementById("anio").value;
             
-            // get() realiza la carga
-            get(child(ref(db, 'riego/historial'), `${anio}/${mes}`)).then(snapshot => {
+            // Se usa get() para cargar los datos una vez
+            get(ref(db, `riego/historial/${anio}/${mes}`)).then(snapshot => {
                 procesarDatosHistorial(snapshot, `Historial completo de ${mes}/${anio}`);
+            }).catch(error => {
+                console.error("Error al cargar historial:", error);
+                mostrarNotificacion("No se pudo cargar el historial para esa fecha.", 4000);
             });
         }
 
