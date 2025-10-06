@@ -104,6 +104,7 @@
 
     <script type="module">
         // Importaciones modulares de Firebase 
+        // Se usa la versión CDN para los módulos
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getDatabase, ref, onValue, set, get, child } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
@@ -123,15 +124,15 @@
 
         async function initializeAppAndAuth() {
             try {
-                // 1. CONFIGURACIÓN ESTATICA DEL PROYECTO 'riego-hibrido' (USANDO TUS CLAVES)
+                // 1. CONFIGURACIÓN DEL PROYECTO 'riego-hibrido-v3' (ACTUALIZADO)
                 const firebaseConfig = {
-                    apiKey: "AIzaSyAzXHzQBJHt60kQ14X4a7OZ3fJVdoHGBk8",
-                    authDomain: "riego-hibrido.firebaseapp.com",
-                    databaseURL: "https://riego-hibrido-default-rtdb.firebaseio.com",
-                    projectId: "riego-hibrido",
-                    storageBucket: "riego-hibrido.firebasestorage.app",
-                    messagingSenderId: "283637108482",
-                    appId: "1:283637108482:web:7acc8ccb8b188087cd7c1b"
+                    apiKey: "AIzaSyDm4UQ_tOSC36IfWjHwNOP2aYAy_iMjE9c",
+                    authDomain: "riego-hibrido-v3.firebaseapp.com",
+                    databaseURL: "https://riego-hibrido-v3-default-rtdb.firebaseio.com",
+                    projectId: "riego-hibrido-v3",
+                    storageBucket: "riego-hibrido-v3.firebasestorage.app",
+                    messagingSenderId: "991487752193",
+                    appId: "1:991487752193:web:3369272f5ebbb357b6a800"
                 };
                 
                 // Usamos la configuración dinámica de autenticación del entorno como fallback
@@ -159,7 +160,7 @@
 
             } catch (error) {
                 console.error("Error FATAL al inicializar Firebase o autenticar:", error);
-                mostrarNotificacion("Error de conexión con Firebase. Por favor, revisa las reglas de seguridad de 'riego-hibrido'.", 8000);
+                mostrarNotificacion("Error de conexión con Firebase. Por favor, revisa las reglas de seguridad.", 8000);
             }
         }
 
@@ -174,9 +175,9 @@
                 humedad.textContent = valor ?? "--";
 
                 // Control visual por umbrales
-                if (valor < 30) box.style.background = "#e74c3c"; 
-                else if (valor <= 60) box.style.background = "#f1c40f"; 
-                else box.style.background = "#2ecc71"; 
+                if (valor < 30) box.style.background = "#e74c3c"; // Rojo (Muy seco) 
+                else if (valor <= 60) box.style.background = "#f1c40f"; // Amarillo (Seco/Normal) 
+                else box.style.background = "#2ecc71"; // Verde (Húmedo) 
             });
 
             // Estado de Riego (Bomba: ON/OFF)
@@ -264,10 +265,14 @@
 
             if (datos) {
                 // Iterar sobre DÍA -> HORA:MINUTO -> VALOR
+                // El nivel de la referencia es: .../riego/historial/{año}/{mes}
+                // El nivel de la snapshot actual es: {mes}
+                const mes = snapshot.key; // Obtener el mes de la snapshot actual
+                const anio = snapshot.ref.parent.key; // Obtener el año del padre de la snapshot
+                
+                // Asegurarse de que el nivel de iteración sea el correcto (día)
                 for (const dia in datos) {
                     for (const hora in datos[dia]) {
-                        const mes = snapshot.ref.parent.key; 
-                        const anio = snapshot.ref.parent.parent.key;
                         etiquetas.push(`${dia}/${mes}/${anio} ${hora}`);
                         valores.push(datos[dia][hora]);
                     }
@@ -285,9 +290,11 @@
             if (!db) return; 
             const hoy = new Date();
             const año = hoy.getFullYear();
-            const mes = hoy.getMonth() + 1;
+            const mes = hoy.getMonth() + 1; // getMonth() es 0-indexado
             
+            // Listener en el mes actual. La estructura debe ser /riego/historial/{año}/{mes}
             onValue(ref(db, `riego/historial/${año}/${mes}`), snapshot => {
+                // Se pasa la referencia completa para que 'procesarDatosHistorial' pueda reconstruir la fecha
                 procesarDatosHistorial(snapshot, `Datos en tiempo real de ${mes}/${año}`);
             });
         }
@@ -298,11 +305,19 @@
             const mes = document.getElementById("mes").value;
             const anio = document.getElementById("anio").value;
             
+            // Se usa 'get' para una consulta única de historial
             get(ref(db, `riego/historial/${anio}/${mes}`)).then(snapshot => {
-                procesarDatosHistorial(snapshot, `Historial completo de ${mes}/${anio}`);
+                if (snapshot.exists()) {
+                    procesarDatosHistorial(snapshot, `Historial completo de ${mes}/${anio}`);
+                    mostrarNotificacion("Historial cargado correctamente.", 2000);
+                } else {
+                    mostrarNotificacion(`No hay datos de historial para ${mes}/${anio}.`, 4000);
+                    // Opcional: limpiar gráfico si no hay datos
+                    procesarDatosHistorial(snapshot, `Historial completo de ${mes}/${anio}`); 
+                }
             }).catch(error => {
                 console.error("Error al cargar historial:", error);
-                mostrarNotificacion("No se pudo cargar el historial para esa fecha.", 4000);
+                mostrarNotificacion("Error al cargar el historial. Revisa tus reglas de lectura.", 4000);
             });
         }
 
@@ -311,4 +326,3 @@
     </script>
 </body>
 </html>
-```eof
