@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel de Riego V3</title>
-    <!-- Carga de librerías -->
+    <title>Panel de Riego Híbrido</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         /* Estilos base (Diseño limpio y responsive) */
@@ -63,23 +62,19 @@
     </style>
 </head>
 <body>
-    <h1>🌱 Panel de Riego V3</h1>
+    <h1>🌱 Panel de Riego Híbrido</h1>
     
-    <!-- Secciones de Datos en Tiempo Real -->
     <div id="humedadBox" class="dato">Humedad actual: <span id="humedad">--</span>%</div>
     <div class="riego">Estado de riego: <span id="estadoRiego">--</span></div>
     <div class="origen">Origen del cambio: <span id="origenRiego">--</span></div>
     
-    <!-- Contenedor para notificaciones -->
     <div id="notificacion"></div>
 
-    <!-- Botones de Control -->
     <button class="on" onclick="controlRiego('ON')">Activar riego</button>
     <button class="off" onclick="controlRiego('OFF')">Desactivar riego</button>
     <button class="auto" onclick="setModo('auto')">Modo automático</button>
     <button class="manual" onclick="setModo('manual')">Modo manual</button>
 
-    <!-- Sección de Historial -->
     <div style="margin-top: 1.5em;">
         <h3>📅 Consultar historial</h3>
         <select id="mes">
@@ -103,13 +98,12 @@
         <button onclick="cargarHistorial()">Ver historial</button>
     </div>
 
-    <!-- Gráfico -->
     <div class="chart-container">
         <canvas id="graficoHumedad" width="400" height="200"></canvas>
     </div>
 
     <script type="module">
-        // Importaciones modulares de Firebase (necesarias para la estabilidad en el entorno)
+        // Importaciones modulares de Firebase 
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getDatabase, ref, onValue, set, get, child } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
@@ -129,24 +123,30 @@
 
         async function initializeAppAndAuth() {
             try {
-                // 1. Configuración de Firebase
-                const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+                // 1. CONFIGURACIÓN ESTATICA DEL PROYECTO 'riego-hibrido' (USANDO TUS CLAVES)
+                const firebaseConfig = {
+                    apiKey: "AIzaSyAzXHzQBJHt60kQ14X4a7OZ3fJVdoHGBk8",
+                    authDomain: "riego-hibrido.firebaseapp.com",
+                    databaseURL: "https://riego-hibrido-default-rtdb.firebaseio.com",
+                    projectId: "riego-hibrido",
+                    storageBucket: "riego-hibrido.firebasestorage.app",
+                    messagingSenderId: "283637108482",
+                    appId: "1:283637108482:web:7acc8ccb8b188087cd7c1b"
+                };
+                
+                // Usamos la configuración dinámica de autenticación del entorno como fallback
                 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-                if (Object.keys(firebaseConfig).length === 0) {
-                    throw new Error("Configuración de Firebase no cargada.");
-                }
 
                 const app = initializeApp(firebaseConfig);
                 const auth = getAuth(app);
                 db = getDatabase(app);
 
-                // 2. Autenticación: Intentamos con token, si falla, usamos Anónimo (esencial para ESP32)
+                // 2. Autenticación con fallback (esencial para la conexión sin errores)
                 if (initialAuthToken) {
                     try {
                         await signInWithCustomToken(auth, initialAuthToken);
                     } catch (e) {
-                        console.warn("Fallo la autenticación con token. Usando modo anónimo. Error:", e);
+                        // Si el token falla, usamos el modo anónimo (como operan los ESP32)
                         await signInAnonymously(auth);
                     }
                 } else {
@@ -159,8 +159,7 @@
 
             } catch (error) {
                 console.error("Error FATAL al inicializar Firebase o autenticar:", error);
-                // Muestra un mensaje amigable al usuario
-                mostrarNotificacion("Error de conexión: Por favor, revisa la consola para detalles del fallo.", 8000);
+                mostrarNotificacion("Error de conexión con Firebase. Por favor, revisa las reglas de seguridad de 'riego-hibrido'.", 8000);
             }
         }
 
@@ -208,7 +207,7 @@
                 .then(() => {
                     const mensaje = estado === 'ON' ? "💧 Riego activado manualmente." : "🛑 Riego desactivado manualmente.";
                     mostrarNotificacion(mensaje);
-                    // Si el usuario presiona ON/OFF, forzamos el modo a manual
+                    // Forzamos el modo a manual para dar control al usuario
                     set(ref(db, "riego/origen"), "manual");
                 })
                 .catch(error => {
@@ -265,7 +264,6 @@
 
             if (datos) {
                 // Iterar sobre DÍA -> HORA:MINUTO -> VALOR
-                // Asumiendo que la estructura es historial/AÑO/MES/DIA/HORA:MINUTO = VALOR
                 for (const dia in datos) {
                     for (const hora in datos[dia]) {
                         const mes = snapshot.ref.parent.key; 
@@ -289,7 +287,6 @@
             const año = hoy.getFullYear();
             const mes = hoy.getMonth() + 1;
             
-            // onValue escucha los cambios en tiempo real en la ruta del mes actual
             onValue(ref(db, `riego/historial/${año}/${mes}`), snapshot => {
                 procesarDatosHistorial(snapshot, `Datos en tiempo real de ${mes}/${año}`);
             });
@@ -301,7 +298,6 @@
             const mes = document.getElementById("mes").value;
             const anio = document.getElementById("anio").value;
             
-            // Se usa get() para cargar los datos una vez
             get(ref(db, `riego/historial/${anio}/${mes}`)).then(snapshot => {
                 procesarDatosHistorial(snapshot, `Historial completo de ${mes}/${anio}`);
             }).catch(error => {
@@ -315,3 +311,4 @@
     </script>
 </body>
 </html>
+```eof
