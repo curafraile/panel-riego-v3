@@ -1,197 +1,193 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>Panel de Riego</title>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    body { font-family: sans-serif; text-align: center; padding: 2em; background: #f0f0f0; }
-    h1 { color: #2c3e50; }
-    .dato { font-size: 2em; margin: 1em 0; padding: 0.5em; border-radius: 10px; display: inline-block; }
-    .riego, .origen { margin-top: 1em; font-weight: bold; color: #2980b9; }
-    button, select { padding: 0.5em 1em; font-size: 1em; margin: 0.5em; border-radius: 5px; }
-    button { border: none; cursor: pointer; color: white; }
-    button:hover { opacity: 0.9; }
-    .on { background: #27ae60; }
-    .off { background: #c0392b; }
-    .auto { background: #3498db; }
-    .manual { background: #8e44ad; }
-    canvas { margin-top: 2em; }
-  </style>
+  <meta charset="UTF-8">
+  <title>🌱 Panel de Riego</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 2em; background: #f0f0f0; }
+    h1 { color: #2c3e50; }
+    .dato { font-size: 2em; margin: 1em 0; padding: 0.5em; border-radius: 10px; display: inline-block; }
+    .riego, .origen { margin-top: 1em; font-weight: bold; color: #2980b9; }
+    button, select { padding: 0.5em 1em; font-size: 1em; margin: 0.5em; border-radius: 5px; }
+    button { border: none; cursor: pointer; color: white; }
+    button:hover { opacity: 0.9; }
+    .on { background: #27ae60; }
+    .off { background: #c0392b; }
+    .auto { background: #3498db; }
+    .manual { background: #8e44ad; }
+    canvas { margin-top: 2em; }
+  </style>
 </head>
 <body>
-  <h1>🌱 Panel de Riego</h1>
-  <div id="humedadBox" class="dato">Humedad actual: <span id="humedad">--</span>%</div>
-  <div class="riego">Estado de riego: <span id="estadoRiego">--</span></div>
-  <div class="origen">Origen del cambio: <span id="origenRiego">--</span></div>
-  <button class="on" onclick="activarRiego()">Activar riego</button>
-  <button class="off" onclick="desactivarRiego()">Desactivar riego</button>
-  <button class="auto" onclick="activarAutomatico()">Modo automático</button>
-  <button class="manual" onclick="activarManual()">Modo manual</button>
+  <h1>🌱 Panel de Riego</h1>
+  <div id="humedadBox" class="dato">Humedad actual: <span id="humedad">--</span>%</div>
+  <div class="riego">Estado de riego: <span id="estadoRiego">--</span></div>
+  <div class="origen">Origen del cambio: <span id="origenRiego">--</span></div>
+  <button class="on" onclick="activarRiego()">Activar riego</button>
+  <button class="off" onclick="desactivarRiego()">Desactivar riego</button>
+  <button class="auto" onclick="activarAutomatico()">Modo automático</button>
+  <button class="manual" onclick="activarManual()">Modo manual</button>
 
-  <div>
-    <h3>📅 Consultar historial</h3>
-    <select id="mes">
-      <option value="1">Enero</option>
-      <option value="2">Febrero</option>
-      <option value="3">Marzo</option>
-      <option value="4">Abril</option>
-      <option value="5">Mayo</option>
-      <option value="6">Junio</option>
-      <option value="7">Julio</option>
-      <option value="8">Agosto</option>
-      <option value="9" selected>Septiembre</option>
-      <option value="10">Octubre</option>
-      <option value="11">Noviembre</option>
-      <option value="12">Diciembre</option>
-    </select>
-    <select id="anio">
-      <option value="2024">2024</option>
-      <option value="2025" selected>2025</option>
-    </select>
-    <button onclick="cargarHistorial()">Ver historial</button>
-  </div>
+  <div>
+    <h3>📅 Consultar historial</h3>
+    <select id="mes">
+      <option value="1">Enero</option>
+      <option value="2">Febrero</option>
+      <option value="3">Marzo</option>
+      <option value="4">Abril</option>
+      <option value="5">Mayo</option>
+      <option value="6">Junio</option>
+      <option value="7">Julio</option>
+      <option value="8">Agosto</option>
+      <option value="9" selected>Septiembre</option>
+      <option value="10">Octubre</option>
+      <option value="11">Noviembre</option>
+      <option value="12">Diciembre</option>
+    </select>
+    <select id="anio">
+      <option value="2024">2024</option>
+      <option value="2025" selected>2025</option>
+    </select>
+    <button onclick="cargarHistorial()">Ver historial</button>
+  </div>
 
-  <canvas id="graficoHumedad" width="400" height="200"></canvas>
+  <canvas id="graficoHumedad" width="400" height="200"></canvas>
 
-  <script>
-   const firebaseConfig = {
-  apiKey: "AIzaSyDm4UQ_tOSC36IfWjHwNOP2aYAy_iMjE9c",
-  authDomain: "riego-hibrido-v3.firebaseapp.com",
-  databaseURL: "https://riego-hibrido-v3-default-rtdb.firebaseio.com",
-  projectId: "riego-hibrido-v3",
-  storageBucket: "riego-hibrido-v3.firebasestorage.app",
-  messagingSenderId: "991487752193",
-  appId: "1:991487752193:web:3369272f5ebbb357b6a800"
-};
+  <script>
+   // **ESTA ES LA CONFIGURACIÓN SIMPLIFICADA QUE DEBE FUNCIONAR**
+   const firebaseConfig = {
+     apiKey: "AIzaSyDm4UQ_tOSC36IfWjHwNOP2aYAy_iMjE9c",
+     databaseURL: "https://riego-hibrido-v3-default-rtdb.firebaseio.com",
+   };
 
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
 
-    db.ref("riego/humedad").on("value", snapshot => {
-      const valor = snapshot.val();
-      const humedad = document.getElementById("humedad");
-      const box = document.getElementById("humedadBox");
-      humedad.textContent = valor ?? "--";
+    db.ref("riego/humedad").on("value", snapshot => {
+      const valor = snapshot.val();
+      const humedad = document.getElementById("humedad");
+      const box = document.getElementById("humedadBox");
+      humedad.textContent = valor ?? "--";
 
-      if (valor < 30) box.style.background = "#e74c3c";
-      else if (valor < 60) box.style.background = "#f1c40f";
-      else box.style.background = "#2ecc71";
-    });
+      if (valor < 30) box.style.background = "#e74c3c";
+      else if (valor < 60) box.style.background = "#f1c40f";
+      else box.style.background = "#2ecc71";
+    });
 
-    db.ref("riego/bomba").on("value", snapshot => {
-      const estado = snapshot.val();
-      let texto = "--";
-      if (estado === "ON") texto = "💧 Activada";
-      else if (estado === "OFF") texto = "🛑 Desactivada";
-      document.getElementById("estadoRiego").textContent = texto;
-    });
+    db.ref("riego/bomba").on("value", snapshot => {
+      const estado = snapshot.val();
+      let texto = "--";
+      if (estado === "ON") texto = "💧 Activada";
+      else if (estado === "OFF") texto = "🛑 Desactivada";
+      document.getElementById("estadoRiego").textContent = texto;
+    });
 
-    db.ref("riego/origen").on("value", snapshot => {
-      const origen = snapshot.val();
-      let texto = "--";
-      if (origen === "auto") texto = "🔄 Automático";
-      else if (origen === "manual") texto = "🧑‍🔧 Manual";
-      document.getElementById("origenRiego").textContent = texto;
-    });
+    db.ref("riego/origen").on("value", snapshot => {
+      const origen = snapshot.val();
+      let texto = "--";
+      if (origen === "auto") texto = "🔄 Automático";
+      else if (origen === "manual") texto = "🧑‍🔧 Manual";
+      document.getElementById("origenRiego").textContent = texto;
+    });
 
-    function activarRiego() {
-      db.ref("riego/bomba").set("ON");
-      db.ref("riego/origen").set("manual");
-      alert("💧 Riego activado manualmente");
-    }
+    function activarRiego() {
+      db.ref("riego/bomba").set("ON");
+      db.ref("riego/origen").set("manual");
+      alert("💧 Riego activado manualmente");
+    }
 
-    function desactivarRiego() {
-      db.ref("riego/bomba").set("OFF");
-      db.ref("riego/origen").set("manual");
-      alert("🛑 Riego desactivado manualmente");
-    }
+    function desactivarRiego() {
+      db.ref("riego/bomba").set("OFF");
+      db.ref("riego/origen").set("manual");
+      alert("🛑 Riego desactivado manualmente");
+    }
 
-    function activarAutomatico() {
-      db.ref("riego/origen").set("auto");
-      alert("🔄 Modo automático activado");
-    }
+    function activarAutomatico() {
+      db.ref("riego/origen").set("auto");
+      alert("🔄 Modo automático activado");
+    }
 
-    function activarManual() {
-      db.ref("riego/origen").set("manual");
-      alert("🧑‍🔧 Modo manual activado");
-    }
+    function activarManual() {
+      db.ref("riego/origen").set("manual");
+      alert("🧑‍🔧 Modo manual activado");
+    }
 
-    const ctx = document.getElementById("graficoHumedad").getContext("2d");
-    const grafico = new Chart(ctx, {
-      type: "line",
-      data: {
-        labels: [],
-        datasets: [{
-          label: "Humedad (%)",
-          data: [],
-          borderColor: "#27ae60",
-          backgroundColor: "rgba(39,174,96,0.2)",
-          fill: true,
-          tension: 0.3
-        }]
-      },
-      options: {
-        scales: {
-          x: { title: { display: true, text: "Fecha y hora" } },
-          y: { min: 0, max: 100, title: { display: true, text: "Humedad (%)" } }
-        }
-      }
-    });
+    const ctx = document.getElementById("graficoHumedad").getContext("2d");
+    const grafico = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: [],
+        datasets: [{
+          label: "Humedad (%)",
+          data: [],
+          borderColor: "#27ae60",
+          backgroundColor: "rgba(39,174,96,0.2)",
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options: {
+        scales: {
+          x: { title: { display: true, text: "Fecha y hora" } },
+          y: { min: 0, max: 100, title: { display: true, text: "Humedad (%)" } }
+        }
+      }
+    });
 
-    function cargarUltimaSemana() {
-      const hoy = new Date();
-      const año = hoy.getFullYear();
-      const mes = hoy.getMonth() + 1;
-      const diaActual = hoy.getDate();
-      const diasVisibles = 7;
+    function cargarUltimaSemana() {
+      const hoy = new Date();
+      const año = hoy.getFullYear();
+      const mes = hoy.getMonth() + 1;
+      const diaActual = hoy.getDate();
+      const diasVisibles = 7;
 
-      db.ref(`riego/historial/${año}/${mes}`).on("value", snapshot => {
-        const datos = snapshot.val();
-        const etiquetas = [];
-        const valores = [];
+      db.ref(`riego/historial/${año}/${mes}`).on("value", snapshot => {
+        const datos = snapshot.val();
+        const etiquetas = [];
+        const valores = [];
 
-        for (const dia in datos) {
-          const diaNum = parseInt(dia);
-          if (diaNum >= diaActual - diasVisibles && diaNum <= diaActual) {
-            for (const hora in datos[dia]) {
-              etiquetas.push(`${dia}/${mes} ${hora}`);
-              valores.push(datos[dia][hora]);
-            }
-          }
-        }
+        for (const dia in datos) {
+          const diaNum = parseInt(dia);
+          if (diaNum >= diaActual - diasVisibles && diaNum <= diaActual) {
+            for (const hora in datos[dia]) {
+              etiquetas.push(`${dia}/${mes} ${hora}`);
+              valores.push(datos[dia][hora]);
+            }
+          }
+        }
 
-        grafico.data.labels = etiquetas;
-        grafico.data.datasets[0].data = valores;
-        grafico.update();
-      });
-    }
+        grafico.data.labels = etiquetas;
+        grafico.data.datasets[0].data = valores;
+        grafico.update();
+      });
+    }
 
-    function cargarHistorial() {
-      const mes = document.getElementById("mes").value;
-      const anio = document.getElementById("anio").value;
+    function cargarHistorial() {
+      const mes = document.getElementById("mes").value;
+      const anio = document.getElementById("anio").value;
 
-      db.ref(`riego/historial/${anio}/${mes}`).once("value").then(snapshot => {
-        const datos = snapshot.val();
-        const etiquetas = [];
-        const valores = [];
+      db.ref(`riego/historial/${anio}/${mes}`).once("value").then(snapshot => {
+        const datos = snapshot.val();
+        const etiquetas = [];
+        const valores = [];
 
-        for (const dia in datos) {
-          for (const hora in datos[dia]) {
-            etiquetas.push(`${dia}/${mes} ${hora}`);
-            valores.push(datos[dia][hora]);
-          }
-        }
+        for (const dia in datos) {
+          for (const hora in datos[dia]) {
+            etiquetas.push(`${dia}/${mes} ${hora}`);
+            valores.push(datos[dia][hora]);
+          }
+        }
 
-        grafico.data.labels = etiquetas;
-        grafico.data.datasets[0].data = valores;
-        grafico.update();
-      });
-    }
+        grafico.data.labels = etiquetas;
+        grafico.data.datasets[0].data = valores;
+        grafico.update();
+      });
+    }
 
-    cargarUltimaSemana(); // Carga inicial
-  </script>
+    cargarUltimaSemana(); // Carga inicial
+  </script>
 </body>
 </html>
