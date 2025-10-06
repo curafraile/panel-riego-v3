@@ -2,38 +2,87 @@
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Panel de Riego V3</title>
-    <!-- Carga de librerías -->
+    <!-- Carga de librerías de Firebase y Chart.js -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        /* Estilos idénticos a los solicitados */
-        body { font-family: sans-serif; text-align: center; padding: 2em; background: #f0f0f0; }
-        h1 { color: #2c3e50; }
-        .dato { font-size: 2em; margin: 1em 0; padding: 0.5em; border-radius: 10px; display: inline-block; }
+        /* Estilos base (Diseño limpio y responsive) */
+        body { font-family: 'Inter', sans-serif; text-align: center; padding: 2em; background: #f0f0f0; }
+        h1 { color: #2c3e50; margin-bottom: 0.5em; }
+        .dato { 
+            font-size: 2em; 
+            margin: 1em 0; 
+            padding: 0.5em; 
+            border-radius: 10px; 
+            display: inline-block; 
+            transition: background 0.3s;
+            color: white; /* Mejor contraste en los colores de estado */
+            font-weight: bold;
+            min-width: 250px;
+        }
         .riego, .origen { margin-top: 1em; font-weight: bold; color: #2980b9; }
-        button, select { padding: 0.5em 1em; font-size: 1em; margin: 0.5em; border-radius: 5px; }
+        
+        /* Estilo de Botones */
+        button, select { 
+            padding: 0.5em 1em; 
+            font-size: 1em; 
+            margin: 0.5em; 
+            border-radius: 8px; 
+            transition: transform 0.1s; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+        }
         button { border: none; cursor: pointer; color: white; }
-        button:hover { opacity: 0.9; }
+        button:hover { opacity: 0.9; transform: translateY(-1px); }
         .on { background: #27ae60; }
         .off { background: #c0392b; }
         .auto { background: #3498db; }
         .manual { background: #8e44ad; }
-        canvas { margin-top: 2em; max-width: 100%; height: auto; }
+        
+        /* Contenedor del gráfico y notificaciones */
+        .chart-container { max-width: 800px; margin: 2em auto; padding: 1em; background: white; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.05); }
+        #notificacion { 
+            background: #d1ecf1; 
+            color: #0c5460; 
+            padding: 10px; 
+            border: 1px solid #bee5eb; 
+            border-radius: 5px; 
+            margin: 1em auto; 
+            max-width: 80%;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+        #notificacion.show { opacity: 1; }
+        
+        /* Responsive para dispositivos móviles */
+        @media (max-width: 600px) {
+            .dato { font-size: 1.5em; display: block; width: 90%; margin: 1em auto; }
+            button { display: block; width: 90%; margin: 0.5em auto; }
+            select { margin: 0.5em 0.2em; width: 45%; }
+        }
     </style>
 </head>
 <body>
     <h1>🌱 Panel de Riego V3</h1>
+    
+    <!-- Secciones de Datos en Tiempo Real -->
     <div id="humedadBox" class="dato">Humedad actual: <span id="humedad">--</span>%</div>
     <div class="riego">Estado de riego: <span id="estadoRiego">--</span></div>
     <div class="origen">Origen del cambio: <span id="origenRiego">--</span></div>
+    
+    <!-- Contenedor para notificaciones -->
+    <div id="notificacion"></div>
+
+    <!-- Botones de Control -->
     <button class="on" onclick="activarRiego()">Activar riego</button>
     <button class="off" onclick="desactivarRiego()">Desactivar riego</button>
     <button class="auto" onclick="activarAutomatico()">Modo automático</button>
     <button class="manual" onclick="activarManual()">Modo manual</button>
 
-    <div>
+    <!-- Sección de Historial -->
+    <div style="margin-top: 1.5em;">
         <h3>📅 Consultar historial</h3>
         <select id="mes">
             <option value="1">Enero</option>
@@ -56,10 +105,13 @@
         <button onclick="cargarHistorial()">Ver historial</button>
     </div>
 
-    <canvas id="graficoHumedad" width="400" height="200"></canvas>
+    <!-- Gráfico -->
+    <div class="chart-container">
+        <canvas id="graficoHumedad" width="400" height="200"></canvas>
+    </div>
 
     <script>
-        // CONFIGURACIÓN: APLICANDO TUS CREDENCIALES EXACTAS DE 'riego-hibrido-v3'
+        // --- CONFIGURACIÓN DE FIREBASE (riego-hibrido-v3) ---
         const firebaseConfig = {
             apiKey: "AIzaSyDm4UQ_tOSC36IfWjHwNOP2aYAy_iMjE9c",
             authDomain: "riego-hibrido-v3.firebaseapp.com",
@@ -72,24 +124,35 @@
 
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
+        const notificacionElement = document.getElementById("notificacion");
+
+        // Función de utilidad para mostrar mensajes
+        function mostrarNotificacion(mensaje, duracion = 3000) {
+            notificacionElement.textContent = mensaje;
+            notificacionElement.classList.add("show");
+            setTimeout(() => {
+                notificacionElement.classList.remove("show");
+            }, duracion);
+        }
 
         // ------------------------------------------------------------------
-        // LÓGICA DE LECTURA Y ESCRITURA (DB Realtime)
+        // LECTURA DE DATOS EN TIEMPO REAL
         // ------------------------------------------------------------------
 
-        // Lectura de Humedad
+        // Humedad
         db.ref("riego/humedad").on("value", snapshot => {
             const valor = snapshot.val();
             const humedad = document.getElementById("humedad");
             const box = document.getElementById("humedadBox");
             humedad.textContent = valor ?? "--";
 
-            if (valor < 30) box.style.background = "#e74c3c";
-            else if (valor < 60) box.style.background = "#f1c40f";
-            else box.style.background = "#2ecc71";
+            // Control visual por umbrales: Seco (<30% - Rojo), Medio (30-60% - Amarillo), Húmedo (>60% - Verde)
+            if (valor < 30) box.style.background = "#e74c3c"; 
+            else if (valor <= 60) box.style.background = "#f1c40f"; 
+            else box.style.background = "#2ecc71"; 
         });
 
-        // Estado de Riego (Bomba)
+        // Estado de Riego (Bomba: ON/OFF)
         db.ref("riego/bomba").on("value", snapshot => {
             const estado = snapshot.val();
             let texto = "--";
@@ -98,7 +161,7 @@
             document.getElementById("estadoRiego").textContent = texto;
         });
 
-        // Origen del Control
+        // Origen del Control (auto/manual)
         db.ref("riego/origen").on("value", snapshot => {
             const origen = snapshot.val();
             let texto = "--";
@@ -107,32 +170,34 @@
             document.getElementById("origenRiego").textContent = texto;
         });
 
-        // Funciones de control (Escritura)
+        // ------------------------------------------------------------------
+        // FUNCIONES DE CONTROL (ESCRITURA a Firebase)
+        // ------------------------------------------------------------------
+
         function activarRiego() {
             db.ref("riego/bomba").set("ON");
             db.ref("riego/origen").set("manual");
-            // Se usa alert por mantener el código original, pero se recomienda un modal personalizado.
-            alert("💧 Riego activado manualmente");
+            mostrarNotificacion("💧 Riego activado manualmente.");
         }
 
         function desactivarRiego() {
             db.ref("riego/bomba").set("OFF");
             db.ref("riego/origen").set("manual");
-            alert("🛑 Riego desactivado manualmente");
+            mostrarNotificacion("🛑 Riego desactivado manualmente.");
         }
 
         function activarAutomatico() {
             db.ref("riego/origen").set("auto");
-            alert("🔄 Modo automático activado");
+            mostrarNotificacion("🔄 Modo automático activado. El ESP32 retoma el control.");
         }
 
         function activarManual() {
             db.ref("riego/origen").set("manual");
-            alert("🧑‍🔧 Modo manual activado");
+            mostrarNotificacion("🧑‍🔧 Modo manual activado. El ESP32 obedecerá las órdenes de los botones ON/OFF.");
         }
 
         // ------------------------------------------------------------------
-        // LÓGICA DEL GRÁFICO
+        // LÓGICA DEL GRÁFICO (Historial)
         // ------------------------------------------------------------------
 
         const ctx = document.getElementById("graficoHumedad").getContext("2d");
@@ -159,61 +224,55 @@
             }
         });
 
+        // Función auxiliar para procesar los datos de Firebase y actualizar el gráfico
+        function procesarDatosHistorial(snapshot, titulo) {
+            const datos = snapshot.val();
+            const etiquetas = [];
+            const valores = [];
+
+            if (datos) {
+                // Iterar sobre DÍA -> HORA:MINUTO -> VALOR
+                for (const dia in datos) {
+                    for (const hora in datos[dia]) {
+                        // Se extrae el mes y el año de la referencia (parent keys)
+                        const mes = snapshot.ref.parent.key; 
+                        const anio = snapshot.ref.parent.parent.key;
+                        etiquetas.push(`${dia}/${mes}/${anio} ${hora}`);
+                        valores.push(datos[dia][hora]);
+                    }
+                }
+            }
+
+            grafico.data.labels = etiquetas;
+            grafico.data.datasets[0].data = valores;
+            grafico.data.datasets[0].label = `Humedad (%) - ${titulo}`;
+            grafico.update();
+        }
+
+        // Carga y escucha en tiempo real de los datos del mes actual
         function cargarUltimaSemana() {
             const hoy = new Date();
             const año = hoy.getFullYear();
             const mes = hoy.getMonth() + 1;
-            const diaActual = hoy.getDate();
-            const diasVisibles = 7;
-
+            
+            // on() escucha los cambios en tiempo real
             db.ref(`riego/historial/${año}/${mes}`).on("value", snapshot => {
-                const datos = snapshot.val();
-                const etiquetas = [];
-                const valores = [];
-
-                if (datos) {
-                    for (const dia in datos) {
-                        const diaNum = parseInt(dia);
-                        if (diaNum >= diaActual - diasVisibles && diaNum <= diaActual) {
-                            for (const hora in datos[dia]) {
-                                etiquetas.push(`${dia}/${mes} ${hora}`);
-                                valores.push(datos[dia][hora]);
-                            }
-                        }
-                    }
-                }
-
-                grafico.data.labels = etiquetas;
-                grafico.data.datasets[0].data = valores;
-                grafico.update();
+                procesarDatosHistorial(snapshot, `Datos en tiempo real de ${mes}/${año}`);
             });
         }
 
+        // Carga estática (once()) del historial solicitado por el usuario
         function cargarHistorial() {
             const mes = document.getElementById("mes").value;
             const anio = document.getElementById("anio").value;
-
+            
+            // once() carga los datos una sola vez
             db.ref(`riego/historial/${anio}/${mes}`).once("value").then(snapshot => {
-                const datos = snapshot.val();
-                const etiquetas = [];
-                const valores = [];
-
-                if (datos) {
-                    for (const dia in datos) {
-                        for (const hora in datos[dia]) {
-                            etiquetas.push(`${dia}/${mes} ${hora}`);
-                            valores.push(datos[dia][hora]);
-                        }
-                    }
-                }
-
-                grafico.data.labels = etiquetas;
-                grafico.data.datasets[0].data = valores;
-                grafico.update();
+                procesarDatosHistorial(snapshot, `Historial completo de ${mes}/${anio}`);
             });
         }
 
-        cargarUltimaSemana(); // Carga inicial al empezar
+        cargarUltimaSemana(); // Inicia la carga de datos al abrir la página
     </script>
 </body>
 </html>
