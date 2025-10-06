@@ -3,169 +3,82 @@
 <head>
     <meta charset="UTF-8">
     <title>Panel de Riego V3</title>
+    <!-- Carga de librerías -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script> <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        /* Estilos idénticos a los solicitados */
         body { font-family: sans-serif; text-align: center; padding: 2em; background: #f0f0f0; }
         h1 { color: #2c3e50; }
         .dato { font-size: 2em; margin: 1em 0; padding: 0.5em; border-radius: 10px; display: inline-block; }
         .riego, .origen { margin-top: 1em; font-weight: bold; color: #2980b9; }
-        button, select, input[type="email"], input[type="password"] { padding: 0.5em 1em; font-size: 1em; margin: 0.5em; border-radius: 5px; border: 1px solid #ccc; }
+        button, select { padding: 0.5em 1em; font-size: 1em; margin: 0.5em; border-radius: 5px; }
         button { border: none; cursor: pointer; color: white; }
         button:hover { opacity: 0.9; }
         .on { background: #27ae60; }
         .off { background: #c0392b; }
         .auto { background: #3498db; }
         .manual { background: #8e44ad; }
-        canvas { margin-top: 2em; }
-        #logout-btn { position: absolute; top: 10px; right: 10px; }
+        canvas { margin-top: 2em; max-width: 100%; height: auto; }
     </style>
 </head>
 <body>
+    <h1>🌱 Panel de Riego V3</h1>
+    <div id="humedadBox" class="dato">Humedad actual: <span id="humedad">--</span>%</div>
+    <div class="riego">Estado de riego: <span id="estadoRiego">--</span></div>
+    <div class="origen">Origen del cambio: <span id="origenRiego">--</span></div>
+    <button class="on" onclick="activarRiego()">Activar riego</button>
+    <button class="off" onclick="desactivarRiego()">Desactivar riego</button>
+    <button class="auto" onclick="activarAutomatico()">Modo automático</button>
+    <button class="manual" onclick="activarManual()">Modo manual</button>
 
-    <div id="login-box" style="margin-top: 50px;">
-        <h2>🔒 Acceso a Riego Híbrido V3</h2>
-        <form id="login-form">
-            <input type="email" id="email" placeholder="Correo electrónico" required><br><br>
-            <input type="password" id="password" placeholder="Contraseña" required><br><br>
-            <button type="submit" class="on">Iniciar Sesión</button>
-        </form>
-        <button class="auto" onclick="mostrarRegistro()">¿No tienes cuenta? Regístrate</button>
+    <div>
+        <h3>📅 Consultar historial</h3>
+        <select id="mes">
+            <option value="1">Enero</option>
+            <option value="2">Febrero</option>
+            <option value="3">Marzo</option>
+            <option value="4">Abril</option>
+            <option value="5">Mayo</option>
+            <option value="6">Junio</option>
+            <option value="7">Julio</option>
+            <option value="8">Agosto</option>
+            <option value="9" selected>Septiembre</option>
+            <option value="10">Octubre</option>
+            <option value="11">Noviembre</option>
+            <option value="12">Diciembre</option>
+        </select>
+        <select id="anio">
+            <option value="2024">2024</option>
+            <option value="2025" selected>2025</option>
+        </select>
+        <button onclick="cargarHistorial()">Ver historial</button>
     </div>
 
-    <div id="signup-box" style="display:none; margin-top: 20px;">
-        <h2>✍️ Crear Cuenta V3</h2>
-        <form id="signup-form">
-            <input type="email" id="email-reg" placeholder="Correo electrónico" required><br><br>
-            <input type="password" id="password-reg" placeholder="Contraseña (min 6 caracteres)" required><br><br>
-            <button type="submit" class="manual">Registrarse</button>
-        </form>
-        <button class="auto" onclick="mostrarLogin()">Ya tengo cuenta</button>
-    </div>
-
-    <div id="panel-riego" style="display:none;">
-        <button id="logout-btn" class="off">Cerrar Sesión</button>
-
-        <h1>🌱 Panel de Riego V3</h1>
-        <div id="humedadBox" class="dato">Humedad actual: <span id="humedad">--</span>%</div>
-        <div class="riego">Estado de riego: <span id="estadoRiego">--</span></div>
-        <div class="origen">Origen del cambio: <span id="origenRiego">--</span></div>
-        <button class="on" onclick="activarRiego()">Activar riego</button>
-        <button class="off" onclick="desactivarRiego()">Desactivar riego</button>
-        <button class="auto" onclick="activarAutomatico()">Modo automático</button>
-        <button class="manual" onclick="activarManual()">Modo manual</button>
-
-        <div>
-            <h3>📅 Consultar historial</h3>
-            <select id="mes">
-                <option value="1">Enero</option>
-                <option value="9" selected>Septiembre</option>
-                </select>
-            <select id="anio">
-                <option value="2024">2024</option>
-                <option value="2025" selected>2025</option>
-            </select>
-            <button onclick="cargarHistorial()">Ver historial</button>
-        </div>
-
-        <canvas id="graficoHumedad" width="400" height="200"></canvas>
-    </div>
+    <canvas id="graficoHumedad" width="400" height="200"></canvas>
 
     <script>
-        // CONFIGURACIÓN: REEMPLAZA LOS VALORES CON LOS DE TU PROYECTO RIEGO-HIBRIDO-V3
+        // CONFIGURACIÓN: APLICANDO TUS CREDENCIALES EXACTAS DE 'riego-hibrido-v3'
         const firebaseConfig = {
-            apiKey: "[TU_API_KEY_DE_V3]",
+            apiKey: "AIzaSyDm4UQ_tOSC36IfWjHwNOP2aYAy_iMjE9c",
             authDomain: "riego-hibrido-v3.firebaseapp.com",
             databaseURL: "https://riego-hibrido-v3-default-rtdb.firebaseio.com",
             projectId: "riego-hibrido-v3",
-            storageBucket: "[TU_STORAGE_BUCKET_DE_V3]",
-            messagingSenderId: "[TU_SENDER_ID_DE_V3]",
-            appId: "[TU_APP_ID_DE_V3]"
+            storageBucket: "riego-hibrido-v3.firebasestorage.app",
+            messagingSenderId: "991487752193",
+            appId: "1:991487752193:web:3369272f5ebbb357b6a800"
         };
 
-        // Inicialización y Servicios
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
-        const auth = firebase.auth(); 
 
         // ------------------------------------------------------------------
-        // 💧 LÓGICA DE AUTENTICACIÓN 💧
+        // LÓGICA DE LECTURA Y ESCRITURA (DB Realtime)
         // ------------------------------------------------------------------
 
-        function iniciarSesion(email, password) {
-            auth.signInWithEmailAndPassword(email, password)
-                .catch((error) => {
-                    console.error("Error de Login:", error.message);
-                    alert("Error de acceso: Correo o contraseña incorrectos.");
-                });
-        }
-
-        function registrarUsuario(email, password) {
-            auth.createUserWithEmailAndPassword(email, password)
-                .then(() => {
-                    alert("Registro exitoso. ¡Inicia sesión!");
-                    mostrarLogin();
-                })
-                .catch((error) => {
-                    console.error("Error de Registro:", error.message);
-                    alert("Error al registrar: " + error.message);
-                });
-        }
-        
-        function cerrarSesion() {
-            auth.signOut();
-        }
-        
-        // Controladores de Vistas
-        function mostrarLogin() {
-            document.getElementById('signup-box').style.display = 'none';
-            document.getElementById('login-box').style.display = 'block';
-        }
-        function mostrarRegistro() {
-            document.getElementById('login-box').style.display = 'none';
-            document.getElementById('signup-box').style.display = 'block';
-        }
-
-        // Observador del Estado de Autenticación (Muestra/Oculta el panel)
-        auth.onAuthStateChanged(user => {
-            if (user) {
-                // Usuario logueado: Muestra el panel, esconde el login
-                document.getElementById('login-box').style.display = 'none';
-                document.getElementById('signup-box').style.display = 'none';
-                document.getElementById('panel-riego').style.display = 'block';
-                cargarUltimaSemana(); // Carga de datos inicial
-            } else {
-                // Usuario NO logueado: Muestra el login, esconde el panel
-                document.getElementById('login-box').style.display = 'block';
-                document.getElementById('signup-box').style.display = 'none';
-                document.getElementById('panel-riego').style.display = 'none';
-            }
-        });
-
-        // Conexión de Formularios (Event Listeners)
-        document.getElementById('login-form').addEventListener('submit', (e) => {
-            e.preventDefault();
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            iniciarSesion(email, password);
-        });
-
-        document.getElementById('signup-form').addEventListener('submit', (e) => {
-            e.preventDefault();
-            const email = document.getElementById('email-reg').value;
-            const password = document.getElementById('password-reg').value;
-            registrarUsuario(email, password);
-        });
-        
-        document.getElementById('logout-btn').addEventListener('click', cerrarSesion);
-
-        // ------------------------------------------------------------------
-        // ⚙️ TU LÓGICA DE RIEGO (Funciona SÓLO cuando hay sesión) ⚙️
-        // ------------------------------------------------------------------
-
+        // Lectura de Humedad
         db.ref("riego/humedad").on("value", snapshot => {
-            // Lógica de humedad (manteniendo tu código original)
             const valor = snapshot.val();
             const humedad = document.getElementById("humedad");
             const box = document.getElementById("humedadBox");
@@ -176,8 +89,8 @@
             else box.style.background = "#2ecc71";
         });
 
+        // Estado de Riego (Bomba)
         db.ref("riego/bomba").on("value", snapshot => {
-            // Lógica de bomba
             const estado = snapshot.val();
             let texto = "--";
             if (estado === "ON") texto = "💧 Activada";
@@ -185,8 +98,8 @@
             document.getElementById("estadoRiego").textContent = texto;
         });
 
+        // Origen del Control
         db.ref("riego/origen").on("value", snapshot => {
-            // Lógica de origen
             const origen = snapshot.val();
             let texto = "--";
             if (origen === "auto") texto = "🔄 Automático";
@@ -194,15 +107,113 @@
             document.getElementById("origenRiego").textContent = texto;
         });
 
-        // Tus funciones de control (usan 'db' que ya está inicializado)
+        // Funciones de control (Escritura)
         function activarRiego() {
             db.ref("riego/bomba").set("ON");
             db.ref("riego/origen").set("manual");
+            // Se usa alert por mantener el código original, pero se recomienda un modal personalizado.
             alert("💧 Riego activado manualmente");
         }
-        // ... (resto de tus funciones: desactivarRiego, activarAutomatico, activarManual, cargarHistorial) ...
-        // ... (Tu código de Chart.js y funciones de historial permanece igual) ...
 
+        function desactivarRiego() {
+            db.ref("riego/bomba").set("OFF");
+            db.ref("riego/origen").set("manual");
+            alert("🛑 Riego desactivado manualmente");
+        }
+
+        function activarAutomatico() {
+            db.ref("riego/origen").set("auto");
+            alert("🔄 Modo automático activado");
+        }
+
+        function activarManual() {
+            db.ref("riego/origen").set("manual");
+            alert("🧑‍🔧 Modo manual activado");
+        }
+
+        // ------------------------------------------------------------------
+        // LÓGICA DEL GRÁFICO
+        // ------------------------------------------------------------------
+
+        const ctx = document.getElementById("graficoHumedad").getContext("2d");
+        const grafico = new Chart(ctx, {
+            type: "line",
+            data: {
+                labels: [],
+                datasets: [{
+                    label: "Humedad (%)",
+                    data: [],
+                    borderColor: "#27ae60",
+                    backgroundColor: "rgba(39,174,96,0.2)",
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { title: { display: true, text: "Fecha y hora" } },
+                    y: { min: 0, max: 100, title: { display: true, text: "Humedad (%)" } }
+                }
+            }
+        });
+
+        function cargarUltimaSemana() {
+            const hoy = new Date();
+            const año = hoy.getFullYear();
+            const mes = hoy.getMonth() + 1;
+            const diaActual = hoy.getDate();
+            const diasVisibles = 7;
+
+            db.ref(`riego/historial/${año}/${mes}`).on("value", snapshot => {
+                const datos = snapshot.val();
+                const etiquetas = [];
+                const valores = [];
+
+                if (datos) {
+                    for (const dia in datos) {
+                        const diaNum = parseInt(dia);
+                        if (diaNum >= diaActual - diasVisibles && diaNum <= diaActual) {
+                            for (const hora in datos[dia]) {
+                                etiquetas.push(`${dia}/${mes} ${hora}`);
+                                valores.push(datos[dia][hora]);
+                            }
+                        }
+                    }
+                }
+
+                grafico.data.labels = etiquetas;
+                grafico.data.datasets[0].data = valores;
+                grafico.update();
+            });
+        }
+
+        function cargarHistorial() {
+            const mes = document.getElementById("mes").value;
+            const anio = document.getElementById("anio").value;
+
+            db.ref(`riego/historial/${anio}/${mes}`).once("value").then(snapshot => {
+                const datos = snapshot.val();
+                const etiquetas = [];
+                const valores = [];
+
+                if (datos) {
+                    for (const dia in datos) {
+                        for (const hora in datos[dia]) {
+                            etiquetas.push(`${dia}/${mes} ${hora}`);
+                            valores.push(datos[dia][hora]);
+                        }
+                    }
+                }
+
+                grafico.data.labels = etiquetas;
+                grafico.data.datasets[0].data = valores;
+                grafico.update();
+            });
+        }
+
+        cargarUltimaSemana(); // Carga inicial al empezar
     </script>
 </body>
 </html>
