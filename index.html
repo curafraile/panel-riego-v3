@@ -1,299 +1,284 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Panel de Riego Híbrido</title>
-<!-- Carga de Tailwind CSS para una estética limpia y responsiva -->
-<script src="https://cdn.tailwindcss.com"></script>
-<style>
-/* Reset de fuente y estilo base */
-body { 
-    font-family: 'Inter', sans-serif; 
-    text-align: center; 
-    padding: 1em; 
-    background: #f4f7f6; /* Fondo suave */
-}
-h1 { 
-    color: #2c3e50; 
-    margin-bottom: 1em; 
-    font-weight: 700; 
-}
-.zona-box { 
-    display: inline-block; 
-    width: 180px; 
-    padding: 1.5em 1em; 
-    margin: 0.5em; 
-    border-radius: 12px; 
-    font-size: 1.5em; 
-    color: white; 
-    transition: background 0.3s, transform 0.1s; 
-    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); 
-}
-/* Estilos para botones grandes y táctiles */
-button, select { 
-    padding: 0.75em 1.5em; 
-    font-size: 1em; 
-    margin: 0.5em; 
-    border-radius: 8px; 
-    cursor: pointer; 
-    color: white; 
-    border: none; 
-    transition: background 0.2s, transform 0.1s;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    min-width: 150px; /* Tamaño mínimo para botón */
-}
-button:hover { opacity: 0.9; transform: translateY(-1px); }
-.on { background: #2ecc71; } /* Verde para ON */
-.off { background: #e74c3c; } /* Rojo para OFF */
-.auto { background: #3498db; }
-.manual { background: #9b59b6; } /* Púrpura para Manual */
-
-/* Responsive: Asegura que los elementos se apilen en móviles */
-@media (max-width: 600px) {
-    .zona-box { width: 90%; display: block; margin: 0.5em auto; }
-    button { width: 45%; margin: 0.4em; }
-    .estado { font-size: 1.1em; }
-}
-</style>
-</head>
-<body>
-<!-- Dependencias de Firebase y Chart.js -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-<div class="max-w-4xl mx-auto bg-white p-6 rounded-xl shadow-2xl">
-
-    <h1 class="text-3xl font-bold mt-4">🌱 Panel de Riego Híbrido</h1>
-
-    <!-- Cajas de estado de humedad -->
-    <div class="mt-6 flex flex-wrap justify-center gap-4">
-        <div id="zona1Box" class="zona-box bg-blue-500">Zona 1: <span id="humedad1">--</span>%</div>
-        <div id="zona2Box" class="zona-box bg-orange-500">Zona 2: <span id="humedad2">--</span>%</div>
-    </div>
-
-    <!-- Indicadores de estado de riego -->
-    <div class="estado mt-8 text-gray-800">Estado de riego: <span id="estadoRiego" class="font-extrabold text-lg">--</span></div>
-    <div class="estado text-gray-800">Origen: <span id="origenRiego" class="font-extrabold text-lg">--</span></div>
-
-    <!-- Controles de zona y botones -->
-    <div class="mt-8">
-        <label for="selectZona" class="font-semibold text-gray-700 block mb-2">Seleccionar zona para control manual:</label>
-        <select id="selectZona" class="text-gray-900 border border-gray-300 p-2 rounded-lg shadow-inner">
-            <option value="1">Zona 1</option>
-            <option value="2">Zona 2</option>
-            <option value="0">Ambas</option>
-        </select>
-    </div>
-
-    <div class="mt-6 flex flex-wrap justify-center gap-3">
-        <!-- CRÍTICO: Botones de control manual -->
-        <button class="on" onclick="activarRiego()">Activar riego</button>
-        <button class="off" onclick="desactivarRiego()">Desactivar riego</button>
-        <button class="auto" onclick="activarAutomatico()">Modo automático</button>
-        <button class="manual" onclick="activarManual()">Modo manual</button>
-    </div>
-
-    <!-- Sección de historial -->
-    <div class="mt-10 border-t pt-6">
-        <h3 class="text-xl font-semibold text-gray-700">📅 Consultar historial</h3>
-        <p class="text-sm text-gray-500">Mostrando datos de los últimos 7 días por defecto.</p>
-        <button class="bg-gray-500 hover:bg-gray-700" onclick="cargarHistorialPersonalizado()">Ver últimos 7 días</button>
-    </div>
-
-    <!-- Gráfico -->
-    <div class="mt-6 p-4 bg-gray-50 rounded-lg shadow-inner">
-        <canvas id="graficoHumedad"></canvas>
-    </div>
-
-</div>
-
-<script>
-// ======================= CONFIGURACIÓN DE FIREBASE =======================
-// POR FAVOR, VERIFICA que la apiKey y databaseURL sean las correctas para tu proyecto
-const firebaseConfig = {
-    apiKey: "AIzaSyDm4UQ_tOSC36IfWjHwNOP2aYAy_iMjE9c", 
-    databaseURL: "https://riego-hibrido-v3-default-rtdb.firebaseio.com",
-};
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-const estadoRef = db.ref("riego");
-const historialRef = db.ref("riego/historial");
-
-
-// ======================= ACTUALIZACIÓN EN TIEMPO REAL =======================
-
-// Humedad (zona1 y zona2)
-estadoRef.child("zona1").on("value", snap => {
-    const val = snap.val();
-    document.getElementById("humedad1").textContent = val ?? "--";
-    const box = document.getElementById("zona1Box");
-    // Lógica de colores: Rojo (Seco <30), Amarillo (Normal 30-60), Azul (Húmedo >60)
-    box.style.backgroundColor = val < 30 ? "#e74c3c" : val < 60 ? "#f1c40f" : "#3498db";
-});
-estadoRef.child("zona2").on("value", snap => {
-    const val = snap.val();
-    document.getElementById("humedad2").textContent = val ?? "--";
-    const box = document.getElementById("zona2Box");
-    // Lógica de colores: Rojo (Seco <30), Naranja (Normal 30-60), Naranja oscuro (Húmedo >60)
-    box.style.backgroundColor = val < 30 ? "#e74c3c" : val < 60 ? "#f39c12" : "#e67e22";
-});
-
-// Estado de riego y origen
-estadoRef.child("bomba").on("value", snap => {
-    const val = snap.val();
-    let texto = "--";
-    if (val === "ON") texto = "💧 ACTIVADA"; else if (val === "OFF" || val === "off") texto = "🛑 DESACTIVADA";
-    document.getElementById("estadoRiego").textContent = texto;
-});
-estadoRef.child("origen").on("value", snap => {
-    const val = snap.val();
-    document.getElementById("origenRiego").textContent = val === "auto" ? "🔄 Automático" : "🧑‍🔧 Manual";
-});
-
-
-// ======================= FUNCIONES DE CONTROL CRÍTICAS (CORREGIDAS) =======================
-
-/**
- * Pone el sistema en modo manual (permite al usuario usar los botones de Riego).
- */
-function activarManual() {
-    estadoRef.child("origen").set("manual");
-    estadoRef.child("bomba").set("OFF"); 
-    estadoRef.child("motor/zona1").set(false);
-    estadoRef.child("motor/zona2").set(false);
-    console.log("Modo manual activado.");
-    alert("🧑‍🔧 Modo manual activado. Usa los botones Activar/Desactivar riego.");
-}
-
-/**
- * Pone el sistema en modo automático (el ESP32 toma el control basado en humedad).
- */
-function activarAutomatico() {
-    estadoRef.child("origen").set("auto");
-    estadoRef.child("bomba").set("OFF");
-    estadoRef.child("motor/zona1").set(false);
-    estadoRef.child("motor/zona2").set(false);
-    console.log("Modo automático activado.");
-    alert("🔄 Modo automático activado. Sensores tienen el control.");
-}
-
-/**
- * Activa la bomba y el motor para la zona seleccionada (SOLO FUNCIONA EN MODO MANUAL).
- */
-function activarRiego() {
-    const origenText = document.getElementById("origenRiego").textContent;
-    // CRÍTICO: Verifica que el modo sea manual antes de enviar la orden
-    if (!origenText.includes("Manual")) {
-        alert("¡Error! Debe pulsar 'Modo manual' (Púrpura) antes de activar el riego.");
-        return;
-    }
-
-    const z = document.getElementById("selectZona").value;
-    const zona1_activo = (z === "1" || z === "0"); // True si es Zona 1 o Ambas
-    const zona2_activo = (z === "2" || z === "0"); // True si es Zona 2 o Ambas
-
-    // 1. Envía la orden de ENCENDER la bomba (El ESP32 lo lee)
-    estadoRef.child("bomba").set("ON");
-    
-    // 2. Envía la orden de movimiento del motor a la zona (El ESP32 lo lee)
-    estadoRef.child("motor/zona1").set(zona1_activo); // true/false
-    estadoRef.child("motor/zona2").set(zona2_activo); // true/false
-    
-    console.log(`Riego activado manualmente en la Zona ${z}.`);
-    alert(`💧 Riego activado manualmente en la Zona ${z}.`);
-}
-
-/**
- * Desactiva la bomba y el motor.
- */
-function desactivarRiego() {
-    // 1. Envía la orden de APAGAR la bomba
-    estadoRef.child("bomba").set("OFF");
-    
-    // 2. Envía la orden de APAGAR el motor
-    estadoRef.child("motor/zona1").set(false);
-    estadoRef.child("motor/zona2").set(false);
-    
-    console.log("Riego desactivado manualmente.");
-    alert("🛑 Riego desactivado manualmente.");
-}
-
-
-// ======================= LÓGICA DE GRÁFICO DE HISTORIAL =======================
-
-const ctx = document.getElementById("graficoHumedad").getContext("2d");
-const grafico = new Chart(ctx, {
-    type: "line",
-    data: {
-        labels: [],
-        datasets: [
-            { label: "Zona 1", data: [], borderColor: "#3498db", backgroundColor: "rgba(52,152,219,0.2)", fill: true, tension: 0.3 },
-            { label: "Zona 2", data: [], borderColor: "#e67e22", backgroundColor: "rgba(230,126,34,0.2)", fill: true, tension: 0.3 }
-        ]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false, 
-        scales: {
-            x: { title: { display: true, text: "Fecha y hora" } },
-            y: { min: 0, max: 100, title: { display: true, text: "Humedad (%)" } }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Riego Híbrido</title>
+    <!-- Firebase v9/v10 compatible (para Realtime Database) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Incluir Tailwind CSS para mejorar la estética y adaptabilidad -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #f4f7f9; }
+        .dato { transition: background-color 0.3s; }
+        .notification { transition: opacity 0.5s, transform 0.5s; }
+        
+        /* Estilos específicos para un mejor look and feel */
+        .shadow-2xl {
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
         }
-    }
-});
+    </style>
+</head>
+<body class="p-4 sm:p-8">
 
-function cargarHistorial(tiempoInicial) {
-    historialRef
-        .orderByKey() 
-        .startAt(tiempoInicial.toString()) 
-        .once("value")
-        .then(snap => {
-            const datos = snap.val() || {};
-            const etiquetas = [], data1 = [], data2 = [];
+    <div class="max-w-4xl mx-auto bg-white p-6 sm:p-10 rounded-xl shadow-2xl">
+        <h1 class="text-3xl font-extrabold text-gray-800 mb-6 flex items-center justify-center">
+            🌱 Panel de Riego Híbrido
+        </h1>
 
-            for (const timestampKey in datos) {
-                const registro = datos[timestampKey];
-                // El timestamp es en SEGUNDOS (del ESP32)
-                const date = new Date(parseInt(timestampKey) * 1000); 
+        <!-- SECCIÓN DE HUMEDAD Y ESTADO -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <!-- Zona 1: Humedad (Motor) -->
+            <div id="humedadBox1" class="dato bg-blue-100 p-6 rounded-xl shadow-lg text-center">
+                <p class="text-xs font-semibold text-blue-700 mb-1">ZONA 1 (Ficticia/Motor)</p>
+                <div class="text-4xl font-bold text-blue-900"><span id="humedad1">--</span>%</div>
+            </div>
+            
+            <!-- Zona 2: Humedad (Sensor real) -->
+            <div id="humedadBox2" class="dato bg-orange-100 p-6 rounded-xl shadow-lg text-center">
+                <p class="text-xs font-semibold text-orange-700 mb-1">ZONA 2 (Sensor real)</p>
+                <div class="text-4xl font-bold text-orange-900"><span id="humedad2">--</span>%</div>
+            </div>
+        </div>
 
-                const etiqueta = `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+        <div class="flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-8 mb-8">
+            <div class="riego text-xl font-bold text-gray-700">Estado de bomba: <span id="estadoRiego" class="text-2xl text-red-600">--</span></div>
+            <div class="origen text-xl font-bold text-gray-700">Modo: <span id="origenRiego" class="text-2xl text-purple-600">--</span></div>
+        </div>
 
-                etiquetas.push(etiqueta);
-                data1.push(registro.z1 ?? 0);
-                data2.push(registro.z2 ?? 0);
-            }
+        <!-- SECCIÓN DE CONTROL -->
+        <div class="bg-gray-50 p-6 rounded-xl mb-8 shadow-inner">
+            <h3 class="text-lg font-semibold text-gray-700 mb-4">Control Manual de Zonas</h3>
+            <div class="flex flex-col sm:flex-row items-center justify-center space-y-3 sm:space-y-0 sm:space-x-4 mb-4">
+                <label for="zonaControl" class="text-sm font-medium text-gray-600">Seleccionar zona:</label>
+                <select id="zonaControl" class="p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                    <option value="ninguna">Ninguna</option>
+                    <option value="zona1">Zona 1 (Motor)</option>
+                    <option value="zona2">Zona 2 (Motor)</option>
+                    <option value="ambas">Ambas Zonas</option>
+                </select>
+            </div>
+            
+            <div class="flex flex-wrap justify-center gap-3">
+                <button id="btnManual" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-300" onclick="activarManual()">Modo Manual</button>
+                <button id="btnAuto" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-300" onclick="activarAutomatico()">Modo Automático</button>
+                <button id="btnON" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-300 disabled:opacity-50" onclick="activarRiego()">Activar Riego</button>
+                <button id="btnOFF" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-300 disabled:opacity-50" onclick="desactivarRiego()">Desactivar Riego</button>
+            </div>
+        </div>
 
-            grafico.data.labels = etiquetas;
-            grafico.data.datasets[0].data = data1;
-            grafico.data.datasets[1].data = data2;
-            grafico.update();
+        <!-- SECCIÓN DE GRÁFICO DE HISTORIAL -->
+        <h3 class="text-2xl font-semibold text-gray-800 mb-4 mt-8 text-center">📊 Historial de Humedad</h3>
+        <div class="bg-gray-50 p-4 rounded-xl shadow-inner">
+            <canvas id="graficoHumedad" width="400" height="200"></canvas>
+            <div class="flex flex-wrap justify-center gap-3 mt-4">
+                 <button class="bg-gray-400 hover:bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-300" onclick="cargarHistorial(7)">Ver últimos 7 días</button>
+                 <button class="bg-gray-400 hover:bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-300" onclick="cargarHistorial(30)">Ver últimos 30 días</button>
+            </div>
+        </div>
 
-            if (etiquetas.length === 0) {
-                console.warn("No hay datos disponibles en el rango de tiempo seleccionado.");
-            }
-        })
-        .catch(error => {
-            console.error("Error al cargar el historial:", error);
-            alert("Hubo un error al cargar el historial.");
+    </div>
+
+    <!-- Contenedor de notificación (reemplaza alert()) -->
+    <div id="notification-container" class="fixed bottom-4 right-4 z-50"></div>
+
+    <script>
+        // Función para mostrar notificaciones personalizadas (reemplazo de alert())
+        function showNotification(message, type = 'info') {
+            const container = document.getElementById('notification-container');
+            const colorMap = {
+                info: 'bg-blue-500', success: 'bg-green-500', error: 'bg-red-500', warning: 'bg-yellow-500'
+            };
+            const bgColor = colorMap[type] || colorMap['info'];
+
+            const notification = document.createElement('div');
+            notification.className = `notification p-4 rounded-lg shadow-xl text-white font-bold mb-3 transform translate-y-0 opacity-100 ${bgColor}`;
+            notification.textContent = message;
+
+            container.appendChild(notification);
+
+            // Desaparecer después de 3 segundos
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                notification.style.transform = 'translateY(10px)';
+                setTimeout(() => notification.remove(), 500); // Eliminar del DOM después de la transición
+            }, 3000);
+        }
+
+        // ------------------ CONFIGURACIÓN FIREBASE ------------------
+        const firebaseConfig = {
+            // Asegúrate de usar la API Key y URL de TU base de datos riego-hibrido-v3
+            apiKey: "AIzaSyDm4UQ_tOSC36IfWjHwNOP2aYAy_iMjE9c", 
+            databaseURL: "https://riego-hibrido-v3-default-rtdb.firebaseio.com", 
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const refRiego = db.ref("riego");
+
+        // ------------------ LISTENERS DE DATOS EN TIEMPO REAL ------------------
+
+        refRiego.on("value", snapshot => {
+            const data = snapshot.val();
+            if (!data) return;
+
+            // Humedad Zonas
+            const h1 = data.zona1 ?? 0;
+            const h2 = data.zona2 ?? 0;
+
+            document.getElementById("humedad1").textContent = h1;
+            document.getElementById("humedad2").textContent = h2;
+            
+            // Colores Z1
+            const box1 = document.getElementById("humedadBox1");
+            if (h1 < 30) box1.style.backgroundColor = "#c0392b"; // Rojo oscuro (seco)
+            else if (h1 < 60) box1.style.backgroundColor = "#f39c12"; // Naranja (humedad media)
+            else box1.style.backgroundColor = "#27ae60"; // Verde (húmedo)
+
+            // Colores Z2
+            const box2 = document.getElementById("humedadBox2");
+            if (h2 < 30) box2.style.backgroundColor = "#c0392b"; // Rojo oscuro
+            else if (h2 < 60) box2.style.backgroundColor = "#f39c12"; // Naranja
+            else box2.style.backgroundColor = "#27ae60"; // Verde
+
+
+            // Estado Bomba
+            const estado = data.bomba || "OFF";
+            const estadoSpan = document.getElementById("estadoRiego");
+            estadoSpan.textContent = estado === "ON" ? "💧 ACTIVADA" : "🛑 DESACTIVADA";
+            estadoSpan.className = estado === "ON" ? "text-2xl text-green-600 font-bold" : "text-2xl text-red-600 font-bold";
+
+            // Origen
+            const origen = data.origen || "auto";
+            const origenSpan = document.getElementById("origenRiego");
+            origenSpan.textContent = origen === "auto" ? "🔄 AUTOMÁTICO" : "🧑‍🔧 MANUAL";
+            origenSpan.className = origen === "auto" ? "text-2xl text-blue-600 font-bold" : "text-2xl text-purple-600 font-bold";
+
+            // Control de botones (Solo se puede usar ON/OFF en modo manual)
+            const isManual = origen === "manual";
+            document.getElementById("btnON").disabled = !isManual;
+            document.getElementById("btnOFF").disabled = !isManual;
         });
-}
 
-function cargarHistorialPersonalizado() {
-    // Calcula la marca de tiempo (timestamp) de hace 7 días en segundos
-    const tiempoHace7Dias = Math.floor(Date.now() / 1000) - (7 * 24 * 3600); 
-    cargarHistorial(tiempoHace7Dias);
-    alert("Cargando historial de los últimos 7 días...");
-}
+        // ------------------ FUNCIONES DE CONTROL ------------------
 
-// Carga inicial al cargar la página: muestra los últimos 7 días
-window.onload = cargarHistorialPersonalizado;
+        function activarManual() {
+            refRiego.update({ origen: "manual" })
+                .then(() => showNotification("🧑‍🔧 Modo manual activado. Ahora puedes usar Activar/Desactivar.", 'success'))
+                .catch(error => showNotification("Error al activar manual: " + error.message, 'error'));
+        }
 
-// Asegurar que el gráfico se redibuje al cambiar el tamaño de la ventana
-window.onresize = function() {
-    grafico.resize();
-};
+        function activarAutomatico() {
+            // Al activar Auto, se asegura que la bomba y el motor estén apagados y resetea el origen a "auto".
+            refRiego.update({ origen: "auto", bomba: "OFF", "motor/zona1": false, "motor/zona2": false })
+                .then(() => showNotification("🔄 Modo automático activado. El ESP32 tomará el control.", 'success'))
+                .catch(error => showNotification("Error al activar automático: " + error.message, 'error'));
+        }
 
-</script>
+        function activarRiego() {
+            const zona = document.getElementById("zonaControl").value;
+            let motorUpdate = { zona1: false, zona2: false };
+
+            if (zona === 'ninguna') {
+                showNotification("⚠️ Selecciona una zona (Zona 1, Zona 2, o Ambas) para activar el riego manual.", 'warning');
+                return;
+            }
+
+            if (zona === 'zona1' || zona === 'ambas') motorUpdate.zona1 = true;
+            if (zona === 'zona2' || zona === 'ambas') motorUpdate.zona2 = true;
+
+            // Se actualiza bomba a ON y se envían los comandos del motor
+            refRiego.update({ bomba: "ON", origen: "manual", motor: motorUpdate })
+                .then(() => showNotification(`💧 Riego activado manualmente para ${zona}.`, 'success'))
+                .catch(error => showNotification("Error al activar riego: " + error.message, 'error'));
+        }
+
+        function desactivarRiego() {
+            // Cuando se desactiva, se apaga la bomba y se detiene el motor.
+            refRiego.update({ bomba: "OFF", origen: "manual", "motor/zona1": false, "motor/zona2": false })
+                .then(() => showNotification("🛑 Riego desactivado manualmente.", 'success'))
+                .catch(error => showNotification("Error al desactivar riego: " + error.message, 'error'));
+        }
+
+        // ------------------ FUNCIONES DE GRÁFICO ------------------
+
+        const ctx = document.getElementById("graficoHumedad").getContext("2d");
+        const grafico = new Chart(ctx, {
+            type: "line",
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: "Humedad Zona 1 (Motor)",
+                        data: [],
+                        borderColor: "#3498db",
+                        backgroundColor: "rgba(52, 152, 219, 0.1)",
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 3
+                    },
+                    {
+                        label: "Humedad Zona 2 (Sensor)",
+                        data: [],
+                        borderColor: "#e67e22",
+                        backgroundColor: "rgba(230, 126, 34, 0.1)",
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 3
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: {
+                    x: { title: { display: true, text: "Fecha y Hora" } },
+                    y: { min: 0, max: 100, title: { display: true, text: "Humedad (%)" } }
+                }
+            }
+        });
+        
+        // Carga los datos de los últimos 'dias' días
+        function cargarHistorial(dias = 7) {
+            const hoy = new Date();
+            const fechaLimite = new Date();
+            fechaLimite.setDate(hoy.getDate() - dias);
+
+            // Obtener datos del historial y filtrarlos
+            // El código Arduino V14 guarda el historial como un array, pero el filtro por tiempo requiere recorrerlo.
+            refRiego.child('historial').orderByChild('t').on("value", snapshot => {
+                const etiquetas = [];
+                const valoresZ1 = [];
+                const valoresZ2 = [];
+
+                snapshot.forEach(childSnapshot => {
+                    const data = childSnapshot.val();
+                    // El ESP32 guarda 't' (timestamp) en segundos. Multiplicamos por 1000 para ms.
+                    const timestamp = (data.t || 0) * 1000; 
+                    
+                    if (timestamp >= fechaLimite.getTime()) {
+                        const date = new Date(timestamp);
+                        // Formato: DD/MM HH:mm
+                        const label = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+                        
+                        etiquetas.push(label);
+                        valoresZ1.push(data.z1 || 0);
+                        valoresZ2.push(data.z2 || 0);
+                    }
+                });
+
+                grafico.data.labels = etiquetas;
+                grafico.data.datasets[0].data = valoresZ1;
+                grafico.data.datasets[1].data = valoresZ2;
+                grafico.update();
+                showNotification(`Historial cargado: Mostrando los últimos ${dias} días.`, 'info');
+            });
+        }
+
+        // Carga inicial al cargar la página
+        window.onload = () => cargarHistorial(7); 
+    </script>
 </body>
 </html>
